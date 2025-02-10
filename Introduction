@@ -1,0 +1,141 @@
+Combine is Apple's framework for handling asynchronous and event-driven code in a declarative and reactive way. 
+It helps manage data streams (like API responses, user input, or notifications) without using delegates, completion
+handlers, or manual state management. 
+
+Think of it as a pipeline that takes some data, process it, and delivers the final result - all in a streamlined way. 
+
+Key Concepts in Simple Terms
+	1.	Publisher – A data source that emits values over time. (e.g., API response, user input, timer)
+	2.	Subscriber – A listener that receives and reacts to data from the publisher.
+	3.	Operator – A modifier that transforms data before passing it to the subscriber.
+	4.	Cancellable – A way to stop receiving updates when they are no longer needed.
+
+import UIKit
+import Combine
+
+class ViewController: UIViewController {
+    @IBOutlet weak var textField: UITextField!
+    @IBOutlet weak var label: UILabel!
+
+    var cancellable: AnyCancellable?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        // Publisher: Listen to textField changes
+        cancellable = NotificationCenter.default
+            .publisher(for: UITextField.textDidChangeNotification, object: textField)
+            .compactMap { ($0.object as? UITextField)?.text } // Extract text
+            .assign(to: \.text, on: label) // Assign text to label
+    }
+}
+
+Step-by-Step Breakdown
+	1.	Publisher: We use NotificationCenter to observe changes in UITextField.
+	2.	Operator (compactMap): Extracts the text from the notification.
+	3.	Subscriber (assign): Updates label.text whenever the user types.
+
+
+Why Use Combine?
+
+✅ Less boilerplate code (No need for delegates or closures)
+✅ More readable and maintainable
+✅ Handles multiple asynchronous events easily
+
+Fetch data with Combine 
+Now, let’s see how Combine simplifies API calls and error handling. This example will:
+✅ Fetch JSON data from a REST API
+✅ Decode the response into a Swift model
+✅ Handle errors gracefully
+✅ Update the UI in the main thread
+
+
+Step 1: Define the model 
+struct User: Codable {
+    let id: Int
+    let name: String
+    let email: String
+}
+
+Step 2: Create the API Service Using Combine
+
+import Foundation
+import Combine
+
+class APIService {
+    func fetchUsers() -> AnyPublisher<[User], Error> {
+        let url = URL(string: "https://jsonplaceholder.typicode.com/users")!
+        
+        return URLSession.shared.dataTaskPublisher(for: url) // Create a publisher
+            .map(\.data) // Extract the data
+            .decode(type: [User].self, decoder: JSONDecoder()) // Decode JSON
+            .receive(on: DispatchQueue.main) // Switch to the main thread
+            .eraseToAnyPublisher() // Convert to a generic publisher
+    }
+}
+
+Step 4: Use the API in ViewModel(MVVM)
+import Combine
+
+class UserViewModel: ObservableObject {
+    @Published var users: [User] = [] // Bindable property
+    @Published var errorMessage: String?
+
+    private var cancellables = Set<AnyCancellable>()
+    private let apiService = APIService()
+
+    func loadUsers() {
+        apiService.fetchUsers()
+            .sink(receiveCompletion: { completion in
+                switch completion {
+                case .failure(let error):
+                    self.errorMessage = "Failed to load users: \(error.localizedDescription)"
+                case .finished:
+                    break
+                }
+            }, receiveValue: { users in
+                self.users = users
+            })
+            .store(in: &cancellables)
+    }
+}
+
+Step 5: Connect to SwiftUI UI
+import SwiftUI
+
+struct ContentView: View {
+    @StateObject private var viewModel = UserViewModel()
+
+    var body: some View {
+        VStack {
+            if let error = viewModel.errorMessage {
+                Text(error).foregroundColor(.red)
+            } else {
+                List(viewModel.users, id: \.id) { user in
+                    VStack(alignment: .leading) {
+                        Text(user.name).font(.headline)
+                        Text(user.email).font(.subheadline)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            viewModel.loadUsers()
+        }
+    }
+}
+
+How Combine Handles the API Call
+	1.	Creates a Publisher (URLSession.shared.dataTaskPublisher)
+	2.	Transforms Data (map and decode)
+	3.	Switches to the Main Thread (receive(on:))
+	4.	Subscribes to the Data Stream (sink(receiveCompletion:receiveValue:))
+	5.	Stores Subscription (store(in:))
+
+Benefits of Using Combine for API Calls
+
+✅ No Delegates Needed – Cleaner, more readable code
+✅ Automatic Thread Switching – UI updates always on the main thread
+✅ Error Handling Included – Graceful error handling
+✅ No Memory Leaks – Auto-cancels subscriptions when not needed
+
